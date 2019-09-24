@@ -1,165 +1,143 @@
 package com.example.my1stapplication;
 
-import android.content.Context;
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
+import android.util.Log;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.multidex.MultiDex;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
-import java.util.ArrayList;
+import java.util.Date;
 
-public class MainActivity extends AppCompatActivity {
-    private Button signUpbtn;
-    private Button signInbtn;
-    private EditText email;
-    private EditText password;
-    private Spinner city;
-    private EditText phone;
-    private FirebaseAuth firebaseAuth;
-    private ArrayList<City> cities = new ArrayList<>();
-    private ArrayAdapter<City> cityArrayAdapter = new ArrayAdapter<City>(getApplicationContext(), R.layout.support_simple_spinner_dropdown_item, cities);
-
-
-    @Override
-    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-        MultiDex.install(this);
-    }
-
-
+public class MainActivity extends AppCompatActivity implements View.OnClickListener{
+    EditText name,email,password;
+    Button mRegisterbtn;
+    TextView mLoginPageBack;
+    FirebaseAuth mAuth;
+    StorageReference mdatabase;
+    String Name,Email,Password;
+    ProgressDialog mDialog;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        firebaseAuth = FirebaseAuth.getInstance();
-        signUpbtn = (Button) findViewById(R.id.signUp);
-        signInbtn = (Button) findViewById(R.id.signIn);
-        city = (Spinner) findViewById(R.id.city);
-        phone = (EditText) findViewById(R.id.phone);
-        email = (EditText) findViewById(R.id.password);
-        password = (EditText) findViewById(R.id.password);
-        createLists();
-        cityArrayAdapter.setDropDownViewResource(R.layout.support_simple_spinner_dropdown_item);
-        city.setAdapter(cityArrayAdapter);
-        city.setOnItemSelectedListener(city_listener);
+        name = (EditText)findViewById(R.id.name);
+        email = (EditText)findViewById(R.id.email);
+        password = (EditText)findViewById(R.id.password);
+        mRegisterbtn = (Button)findViewById(R.id.signUp);
+        mLoginPageBack = (TextView)findViewById(R.id.signIn);
+        mAuth = FirebaseAuth.getInstance();
+        mRegisterbtn.setOnClickListener(this);
+        mLoginPageBack.setOnClickListener(this);
+        mDialog = new ProgressDialog(this);
+        mdatabase = FirebaseStorage.getInstance().getReference().child("Users");
 
-        signUpbtn.setOnClickListener(new View.OnClickListener() {
+    }
 
+    @Override
+    public void onClick(View v) {
+        if (v==mRegisterbtn){
+            UserRegister();
+        }else if (v== mLoginPageBack){
+            startActivity(new Intent(MainActivity.this,ActivityLogin.class));
+            Log.e("TAG", "Message");
+        }
+    }
 
+    private void UserRegister() {
+        Name = name.getText().toString().trim();
+        Email = email.getText().toString().trim();
+        Password = password.getText().toString().trim();
+
+        if (TextUtils.isEmpty(Name)){
+            Toast.makeText(MainActivity.this, "Enter Name", Toast.LENGTH_SHORT).show();
+            return;
+        }else if (TextUtils.isEmpty(Email)){
+            Toast.makeText(MainActivity.this, "Enter Email", Toast.LENGTH_SHORT).show();
+            return;
+        }else if (TextUtils.isEmpty(Password)){
+            Toast.makeText(MainActivity.this, "Enter Password", Toast.LENGTH_SHORT).show();
+            return;
+        }else if (Password.length()<6){
+            Toast.makeText(MainActivity.this,"Passwor must be greater then 6 digit",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mDialog.setMessage("Creating User please wait...");
+        mDialog.setCanceledOnTouchOutside(false);
+        mDialog.show();
+        mAuth.createUserWithEmailAndPassword(Email,Password).addOnCompleteListener(new OnCompleteListener<AuthResult>() {
             @Override
-            public void onClick(View view) {
-                final String emailID = email.getText().toString();
-                final String paswd = password.getText().toString();
-                final String phoneNum = phone.getText().toString();
-                if (emailID.isEmpty()) {
-                    email.setError("Provide your Email first!");
-                    email.requestFocus();
-                } else if (paswd.isEmpty()) {
-                    password.setError("Set your password");
-                    password.requestFocus();
-                } else if (emailID.isEmpty() && paswd.isEmpty()) {
-                    Toast.makeText(MainActivity.this, "Fields Empty!", Toast.LENGTH_SHORT).show();
-                } else if (!(emailID.isEmpty() && paswd.isEmpty())) {
-                    firebaseAuth.createUserWithEmailAndPassword(emailID, paswd).addOnCompleteListener(MainActivity.this, new OnCompleteListener() {
-                        @Override
-                        public void onComplete(Task task) {
-                            Toast.makeText(MainActivity.this, "createUserWithEmail:onComplete:" + task.isSuccessful(), Toast.LENGTH_SHORT).show();
-                            generateUser(emailID, paswd);
-                            if (!task.isSuccessful()) {
-                                Toast.makeText(MainActivity.this.getApplicationContext(),
-                                        "SignUp unsuccessful: " + task.getException().getMessage(),
-                                        Toast.LENGTH_SHORT).show();
-                            } else {
-                                startActivity(new Intent(MainActivity.this, UserActivity.class));
-                            }
-                        }
-
-                        public void generateUser(String username, String password) {
-                            FirebaseDatabase database = FirebaseDatabase.getInstance();
-                            DatabaseReference users = database.getReference("users");
-                            User user = new User(username, password);
-                            users.push().setValue(user);
-                        }
-                    });
-                } else {
-                    Toast.makeText(MainActivity.this, "Error", Toast.LENGTH_SHORT).show();
+            public void onComplete(@NonNull Task<AuthResult> task) {
+                if (task.isSuccessful()){
+                    sendEmailVerification();
+                    mDialog.dismiss();
+                    OnAuth(task.getResult().getUser());
+                    mAuth.signOut();
+                }else{
+                    Toast.makeText(MainActivity.this,"error on creating user",Toast.LENGTH_SHORT).show();
                 }
             }
         });
-
-        signInbtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent I = new Intent(MainActivity.this, ActivityLogin.class);
-                startActivity(I);
-            }
-        });
+    }
+    //Email verification code using FirebaseUser object and using isSucccessful()function.
+    private void sendEmailVerification() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user!=null){
+            user.sendEmailVerification().addOnCompleteListener(new OnCompleteListener<Void>() {
+                @Override
+                public void onComplete(@NonNull Task<Void> task) {
+                    if (task.isSuccessful()){
+                        Toast.makeText(MainActivity.this,"Check your Email for verification",Toast.LENGTH_SHORT).show();
+                        FirebaseAuth.getInstance().signOut();
+                    }
+                }
+            });
+        }
     }
 
-    private AdapterView.OnItemSelectedListener city_listener = new AdapterView.OnItemSelectedListener() {
-        @Override
-        public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-
-        }
-
-        @Override
-        public void onNothingSelected(AdapterView<?> parent) {
-
-        }
-    };
-    private void createLists() {
-        cities.add(new City(0, "Choose a City"));
-        cities.add(new City(1, "City1"));
-        cities.add(new City(2, "City2"));
-        cities.add(new City(3, "City3"));
-        cities.add(new City(4, "City4"));
-        cities.add(new City(5, "City5"));
-        cities.add(new City(6, "City6"));
-        cities.add(new City(7, "City7"));
-        cities.add(new City(8, "City8"));
+    private void OnAuth(FirebaseUser user) {
+        createAnewUser(user.getUid());
     }
 
-    private class City implements Comparable<City> {
+    private void createAnewUser(String uid) {
+        User user = BuildNewuser();
+        mdatabase.child(uid).equals(user);
+    }
 
-        private int cityID;
-        private String cityName;
 
-        public City(int cityID, String cityName) {
-            this.cityID = cityID;
-            this.cityName = cityName;
-        }
+    private User BuildNewuser(){
+        return new User(
+                getDisplayName(),
+                getUserEmail(),
+                getPassword(),
+                new Date().getTime()
+        );
+    }
 
-        public int getCityID() {
-            return cityID;
-        }
+    public String getDisplayName() {
+        return Name;
+    }
 
-        public String getCityName() {
-            return cityName;
-        }
+    public String getUserEmail() {
+        return Email;
+    }
 
-        @Override
-        public String toString() {
-            return cityName;
-        }
-
-        @Override
-        public int compareTo(City another) {
-            return this.cityID - another.getCityID();//ascending order
-//            return another.getCityID() - this.cityID;//descending order
-        }
+    public String getPassword() {
+        return Password;
     }
 }
