@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">projec2</string>
+    <array name="types">
+        <item>Text book</item>
+        <item>Power Point slides</item>
+        <item>Notes</item>
+        <item>Previous exams</item>
+        <item>Work sheets</item>
+        <item>Assignments and projects</item>
+        <item>other</item>
+    </array>
+</resources>
